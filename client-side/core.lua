@@ -1,36 +1,46 @@
 local Inspecting = false
 
-function Preview(Entity)
+function Preview(Entity, Settings, Callback)
+    if Inspecting and Inspecting["Entity"] ~= Entity then
+        Inspecting = false
+    end 
+
+    Inspecting = {}
+    Inspecting["Entity"] = Entity
+    Inspecting["OnClose"] = (type(Callback) == "function" or Callback.__cfx_functionReference) and Callback or false
+
     CreateThread(function()
         while Inspecting and DoesEntityExist(Inspecting["Entity"]) do
             SetLocalPlayerInvisibleLocally(true)
             Citizen.Wait(5)
         end
+
+        SetNuiFocus(false, false)
     end)
 
     FreezeEntityPosition(Entity, true)
     SetNuiFocus(true, true)
     SendNUIMessage({ Action = "Reset", Heading = GetEntityHeading(Entity) })
 
-    Inspecting = {}
-    Inspecting["Entity"] = Entity
-    Inspecting["Camera"] = CreateCam("DEFAULT_SCRIPTED_CAMERA",true)
-
     Inspecting["Position"] = {}
     Inspecting["Position"]["Coords"] = GetEntityCoords(Entity)
     Inspecting["Position"]["Rotation"] = GetEntityRotation(Entity)
 
-    local MinDimension, MaxDimension = GetModelDimensions(Entity)
-    local EntityFov = 35.0 + #(MinDimension - MaxDimension)
-
-    SetCamCoord(Inspecting["Camera"], GetOffsetFromEntityInWorldCoords(PlayerPedId(), 0.0, -1.5, 0.0))
-    SetCamActive(Inspecting["Camera"], true)
-    SetCamEffect(Inspecting["Camera"], 1)
-    SetCamFov(Inspecting["Camera"], EntityFov)
-    RenderScriptCams(true, true, 600, true, true)
-    PointCamAtEntity(Inspecting["Camera"], Entity, 0.0, 0.0, 0.3, true)
-
-    FocusEntity()
+    if not Settings or (Settings and (Settings["Camera"] == nil or Settings["Camera"] == true)) then
+        Inspecting["Camera"] = CreateCam("DEFAULT_SCRIPTED_CAMERA",true)
+        
+        local MinDimension, MaxDimension = GetModelDimensions(Entity)
+        local EntityFov = 35.0 + #(MinDimension - MaxDimension)
+    
+        SetCamCoord(Inspecting["Camera"], GetOffsetFromEntityInWorldCoords(PlayerPedId(), 0.0, -1.5, 0.0))
+        SetCamActive(Inspecting["Camera"], true)
+        SetCamEffect(Inspecting["Camera"], 1)
+        SetCamFov(Inspecting["Camera"], EntityFov)
+        RenderScriptCams(true, true, 600, true, true)
+        PointCamAtEntity(Inspecting["Camera"], Entity, 0.0, 0.0, 0.3, true)
+    
+        FocusEntity()
+    end
 end
 
 function FocusEntity()
@@ -63,6 +73,10 @@ AddEventHandler("onResourceStop", function(Resource)
         if Inspecting then
             SetEntityCoords(Inspecting["Entity"], Inspecting["Position"]["Coords"])
             SetEntityRotation(Inspecting["Entity"], Inspecting["Position"]["Rotation"])
+
+            if Inspecting["OnClose"] then
+                Inspecting["OnClose"]
+            end
         end
     end
 end)
@@ -81,7 +95,10 @@ RegisterNUICallback("CloseInspect", function()
         DestroyCam(Inspecting["Camera"])
     end
 
-    SetNuiFocus(false, false)
+    if Inspecting["OnClose"] then
+        Inspecting["OnClose"]
+    end
+
     Inspecting = false
 end)
 
